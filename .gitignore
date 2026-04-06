@@ -1,0 +1,31 @@
+# Dependencies & build
+**/node_modules/
+**/.next/
+**/dist/
+**/out/
+
+# Env & secrets ( .env.example 은 커밋 )
+.env
+**/.env
+.env.local
+**/.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Release / local bundles
+release/
+*.zip
+.cache/
+apps-in-toss-examples/
+*.ait
+
+# IDE
+.idea/
+.vscode/
+*.swp

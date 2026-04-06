@@ -1,0 +1,98 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Gender {
+  M
+  F
+  UNISEX
+}
+
+enum Season {
+  SPRING
+  SUMMER
+  FALL
+  WINTER
+}
+
+enum ItemCategory {
+  TOP
+  BOTTOM
+  OUTER
+  SHOES
+}
+
+model BodyType {
+  id        Int    @id @default(autoincrement())
+  code      String @unique
+  labelKo   String
+  sortOrder Int    @default(0)
+  items     Item[] @relation("ItemBodyTypes")
+  outfits   OutfitSet[] @relation("OutfitBodyTypes")
+  recommendationLogs RecommendationLog[]
+}
+
+model Item {
+  id              BigInt       @id @default(autoincrement())
+  category        ItemCategory
+  gender          Gender
+  title           String
+  imageUrl        String
+  silhouetteTags Json?
+  bmiMin          Float?
+  bmiMax          Float?
+  isActive        Boolean      @default(true)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  bodyTypes BodyType[] @relation("ItemBodyTypes")
+
+  outfitsTop    OutfitSet[] @relation("OutfitTop")
+  outfitsBottom OutfitSet[] @relation("OutfitBottom")
+  outfitsOuter  OutfitSet[] @relation("OutfitOuter")
+  outfitsShoes  OutfitSet[] @relation("OutfitShoes")
+}
+
+model OutfitSet {
+  id        BigInt   @id @default(autoincrement())
+  code      String   @unique
+  nameKo    String
+  gender    Gender
+  season    Season?
+  topId     BigInt
+  bottomId  BigInt
+  outerId   BigInt?
+  shoesId   BigInt
+  bmiMin    Float?
+  bmiMax    Float?
+  priority  Int      @default(0)
+  isActive  Boolean  @default(true)
+  summaryKo String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  top    Item  @relation("OutfitTop", fields: [topId], references: [id])
+  bottom Item  @relation("OutfitBottom", fields: [bottomId], references: [id])
+  outer  Item? @relation("OutfitOuter", fields: [outerId], references: [id])
+  shoes  Item  @relation("OutfitShoes", fields: [shoesId], references: [id])
+
+  bodyTypes BodyType[] @relation("OutfitBodyTypes")
+}
+
+model RecommendationLog {
+  id           BigInt   @id @default(autoincrement())
+  userRef      String?
+  heightCm     Int
+  weightKg     Float
+  bodyTypeId   Int
+  bmi          Float
+  outfitSetIds Json
+  createdAt    DateTime @default(now())
+
+  bodyType BodyType @relation(fields: [bodyTypeId], references: [id])
+}

@@ -1,0 +1,316 @@
+openapi: 3.0.3
+info:
+  title: FitStyle AI Recommendation API
+  description: |
+    토스 앱인토스 클라이언트가 호출하는 백엔드 API.
+    사용자 UI는 토스에서 구성하고, 본 API는 키·몸무게·체형 기반 코디(제품 단독 컷 이미지) 추천을 제공합니다.
+  version: 0.1.0
+
+servers:
+  - url: http://localhost:3001
+    description: 로컬
+  - url: https://api.example.com
+    description: 스테이징/프로덕션 (배포 시 교체)
+
+tags:
+  - name: health
+  - name: config
+  - name: recommendations
+  - name: admin
+    description: 운영용(ADMIN_API_KEY, 네트워크 제한 권장)
+
+paths:
+  /health:
+    get:
+      tags: [health]
+      summary: 헬스체크
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, service]
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+                  service:
+                    type: string
+                    example: fit-style-ai-api
+
+  /v1/recommendations:
+    post:
+      tags: [recommendations]
+      summary: 체형 기반 코디 추천
+      description: |
+        BMI를 계산하고, 등록된 코디 세트 중 조건에 맞는 항목을 반환합니다.
+        쇼핑 URL은 포함하지 않으며, 슬롯별 제품 이미지 URL만 내려줍니다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecommendationRequest"
+            examples:
+              sample:
+                value:
+                  height_cm: 175
+                  weight_kg: 70
+                  body_type_code: REGULAR
+                  gender: M
+                  season: WINTER
+                  limit: 3
+      responses:
+        "200":
+          description: 성공 (추천이 없을 수 있음 — outfits 빈 배열 + message)
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/RecommendationResponse"
+                  - $ref: "#/components/schemas/RecommendationEmptyResponse"
+        "400":
+          description: 검증 실패 또는 지원하지 않는 체형 코드
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: 서버 오류
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/config:
+    get:
+      tags: [config]
+      summary: 앱이 캐시할 수 있는 설정(체형 코드 목록·입력 한도)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version:
+                    type: string
+                  body_types:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        code: { type: string }
+                        label_ko: { type: string }
+                        sort_order: { type: integer }
+                  limits:
+                    type: object
+
+  /v1/admin/health:
+    get:
+      tags: [admin]
+      summary: 관리 API 상태 (인증 불필요)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  scope: { type: string, example: admin }
+                  admin_configured:
+                    type: boolean
+                    description: ADMIN_API_KEY가 8자 이상 설정되었는지
+
+  /v1/admin/items:
+    get:
+      tags: [admin]
+      summary: 아이템 목록
+      security: [{ AdminBearer: [] }]
+      parameters:
+        - name: include_inactive
+          in: query
+          schema: { type: boolean }
+      responses:
+        "200": { description: OK }
+        "401": { description: 인증 실패 }
+        "503": { description: ADMIN_API_KEY 미설정 }
+    post:
+      tags: [admin]
+      summary: 아이템 생성
+      security: [{ AdminBearer: [] }]
+      responses:
+        "201": { description: 생성됨 }
+        "401": { description: 인증 실패 }
+
+  /v1/admin/items/{id}:
+    patch:
+      tags: [admin]
+      summary: 아이템 수정
+      security: [{ AdminBearer: [] }]
+    delete:
+      tags: [admin]
+      summary: 아이템 비활성화(소프트 삭제)
+      security: [{ AdminBearer: [] }]
+
+  /v1/admin/outfits:
+    get:
+      tags: [admin]
+      summary: 코디 세트 목록
+      security: [{ AdminBearer: [] }]
+    post:
+      tags: [admin]
+      summary: 코디 세트 생성
+      security: [{ AdminBearer: [] }]
+
+  /v1/admin/outfits/{id}:
+    patch:
+      tags: [admin]
+      summary: 코디 세트 수정
+      security: [{ AdminBearer: [] }]
+    delete:
+      tags: [admin]
+      summary: 코디 세트 비활성화
+      security: [{ AdminBearer: [] }]
+
+components:
+  securitySchemes:
+    AdminBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: ADMIN_API_KEY
+    AdminHeader:
+      type: apiKey
+      in: header
+      name: X-Admin-Key
+
+  schemas:
+    RecommendationRequest:
+      type: object
+      required:
+        - height_cm
+        - weight_kg
+        - body_type_code
+        - gender
+      properties:
+        height_cm:
+          type: integer
+          minimum: 130
+          maximum: 220
+          description: 키(cm)
+        weight_kg:
+          type: number
+          format: float
+          minimum: 30
+          maximum: 200
+          description: 몸무게(kg)
+        body_type_code:
+          type: string
+          maxLength: 32
+          description: 체형 코드 (예 SLIM, REGULAR, UPPER, LOWER, BALANCED)
+          example: REGULAR
+        gender:
+          type: string
+          enum: [M, F]
+          description: 코디 세트 성별 매칭용
+        season:
+          type: string
+          enum: [SPRING, SUMMER, FALL, WINTER]
+          description: |
+            선택. 지정 시 `season`이 NULL인 코디(사계절)와 해당 계절 코디가 매칭됩니다.
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 3
+          description: 반환할 코디 세트 최대 개수
+        user_ref:
+          type: string
+          maxLength: 128
+          description: 선택. 토스 사용자 식별자 등(로그용, PII 최소화 권장)
+
+    OutfitSlot:
+      type: object
+      required: [role, image_url]
+      properties:
+        role:
+          type: string
+          enum: [TOP, BOTTOM, OUTER, SHOES]
+        image_url:
+          type: string
+          nullable: true
+          description: 제품 단독 컷. 아우터가 없는 세트면 null 가능.
+
+    Outfit:
+      type: object
+      required: [id, name, slots]
+      properties:
+        id:
+          type: string
+          description: 코디 세트 ID (문자열로 직렬화)
+        name:
+          type: string
+          description: 코디 세트 표시 이름
+        summary:
+          type: string
+          nullable: true
+          description: 짧은 추천 이유
+        slots:
+          type: array
+          items:
+            $ref: "#/components/schemas/OutfitSlot"
+
+    RecommendationResponse:
+      type: object
+      required: [bmi, outfits]
+      properties:
+        bmi:
+          type: number
+          format: float
+          description: 계산된 BMI (소수 첫째 자리 반올림)
+        outfits:
+          type: array
+          items:
+            $ref: "#/components/schemas/Outfit"
+
+    RecommendationEmptyResponse:
+      type: object
+      required: [bmi, outfits, message]
+      properties:
+        bmi:
+          type: number
+          format: float
+        outfits:
+          type: array
+          maxItems: 0
+          items:
+            $ref: "#/components/schemas/Outfit"
+        message:
+          type: string
+          example: 조건에 맞는 코디가 아직 없습니다. 입력을 바꿔 보세요.
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              enum:
+                - INVALID_JSON
+                - VALIDATION_ERROR
+                - UNKNOWN_BODY_TYPE
+                - INTERNAL_ERROR
+                - UNAUTHORIZED
+                - ADMIN_DISABLED
+                - NOT_FOUND
+            message:
+              type: string
+            details:
+              description: VALIDATION_ERROR일 때 Zod 등 상세(선택)

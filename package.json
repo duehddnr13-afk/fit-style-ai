@@ -1,0 +1,8 @@
+{
+  "name": "fit-style-ai-workspace",
+  "private": true,
+  "description": "랜딩 + API — 앱 번들은 npm run bundle",
+  "scripts": {
+    "bundle": "node ./scripts/build-app-bundle.mjs"
+  }
+}
